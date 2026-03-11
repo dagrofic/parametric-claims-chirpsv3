@@ -3,8 +3,8 @@
 """
 CHIRPS V3 Data Extractor - Módulo de extração de dados NetCDF
 =============================================================
-Extrai precipitação de arquivos NetCDF do CHIRPS V3.0 (byMonth)
-Fonte: https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/
+Extrai precipitação de arquivos NetCDF do CHIRPS V3.0 (byYear)
+Fonte: https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byYear/
 
 Autor: Sistema Paramétrico V3 - dagrofic
 Versão: 3.0.0
@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # CONFIGURAÇÕES GLOBAIS
 # ============================================================================
 
-CHIRPS_V3_BASE_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/"
-CHIRPS_V3_ANNUAL_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/"
+CHIRPS_V3_BASE_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byYear/"
+CHIRPS_V3_ANNUAL_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byYear/"
 
 # Nomes possíveis de arquivo CHIRPS V3
 def get_chirps_v3_filename_annual(year: int) -> str:

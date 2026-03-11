@@ -1,0 +1,60 @@
+# ============================================================
+# GitHub Actions — Deploy automático no Render.com
+# CHIRPS V3.0 Paramétrico
+# ============================================================
+# Para ativar: adicione RENDER_API_KEY como secret no GitHub
+# Acesse: https://github.com/dagrofic/parametric-claims-chirpsv3/settings/secrets
+
+name: Deploy no Render
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Permite trigger manual
+
+jobs:
+  deploy:
+    name: Deploy CHIRPS V3 no Render
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Deploy via Render API
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "❌ RENDER_API_KEY não configurada"
+            echo "📋 Adicione o secret em: https://github.com/dagrofic/parametric-claims-chirpsv3/settings/secrets"
+            exit 1
+          fi
+          
+          if [ -n "$SERVICE_ID" ]; then
+            # Trigger deploy em serviço existente
+            echo "🚀 Disparando deploy no serviço: $SERVICE_ID"
+            RESPONSE=$(curl -s -X POST \
+              "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"clearCache": false}')
+            echo "Resposta: $RESPONSE"
+          else
+            # Criar novo serviço via Blueprint (render.yaml)
+            echo "🏗️ Criando novo serviço via Blueprint..."
+            RESPONSE=$(curl -s -X POST \
+              "https://api.render.com/v1/blueprints" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"repoURL\": \"https://github.com/dagrofic/parametric-claims-chirpsv3\",
+                \"branch\": \"main\"
+              }")
+            echo "Blueprint response: $RESPONSE"
+          fi
+          
+          echo "✅ Deploy iniciado!"
+          echo "🔗 Acompanhe em: https://dashboard.render.com"
+

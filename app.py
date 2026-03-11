@@ -26,13 +26,15 @@ from flask import (Flask, render_template, request, jsonify,
 
 from chirps_v3_extractor import (
     extract_chirps_v3, 
+    extract_chirps_v3_with_tif_fallback,
     find_chirps_files_for_period,
     download_chirps_v3_file,
     check_and_update_data,
     get_data_status,
     export_to_excel,
     get_chirps_v3_filename_annual,
-    CHIRPS_V3_ANNUAL_URL
+    CHIRPS_V3_ANNUAL_URL,
+    POLICY_NC_FILE
 )
 from html_parser import parse_html_content, calculate_parametric_claim
 
@@ -129,7 +131,10 @@ def api_process():
         # 2. Encontrar arquivos CHIRPS V3 necessários
         files = find_chirps_files_for_period(DATA_DIR, period_start, period_end)
 
-        if not files:
+        # Verificar se há NetCDF de período da apólice disponível
+        has_policy_nc = os.path.exists(POLICY_NC_FILE)
+        
+        if not files and not has_policy_nc:
             # Tentar baixar automaticamente
             from datetime import datetime as dt
             start_year = int(period_start[:4])
@@ -147,14 +152,15 @@ def api_process():
                 )
             }), 404
 
-        # 3. Extrair dados CHIRPS V3
-        result = extract_chirps_v3(
+        # 3. Extrair dados CHIRPS V3 (com suporte a TIF/NetCDF de apólice)
+        result = extract_chirps_v3_with_tif_fallback(
             files=files,
             target_lat=lat,
             target_lon=lon,
             required_start=period_start,
             required_end=period_end,
-            data_dir=DATA_DIR
+            data_dir=DATA_DIR,
+            use_policy_nc=True
         )
 
         if result["status"] == "error":

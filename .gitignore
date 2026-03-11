@@ -48,3 +48,10 @@ htmlcov/
 output/
 tmp/
 temp/
+
+# Dados CHIRPS - TIFs diários (grandes demais para git)
+data/chirps_v3/tifs/
+data/chirps_v3/2026/chirps-v3.0.rnl.2026.days_p05.nc
+
+# Manter o NetCDF de período da apólice (pequeno - 2.8MB)
+!data/chirps_v3/chirps-v3.0.rnl.policy_RS_2025-12-01_2026-02-15.nc

@@ -729,3 +729,309 @@ def get_data_status(data_dir: str) -> dict:
         status[year] = year_files
 
     return status
+
+
+# ============================================================================
+# SUPORTE A DADOS TIF DIÁRIOS E NetCDF DE PERÍODO DE APÓLICE
+# ============================================================================
+
+# URLs para dados diários
+CHIRPS_V3_DAILY_FINAL_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/"
+CHIRPS_V3_DAILY_PRELIM_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/"
+
+# Diretório base dos TIFs
+CHIRPS_V3_TIF_BASE_DIR = os.path.join(os.path.dirname(__file__), "data", "chirps_v3", "tifs")
+
+# Arquivo NetCDF do período da apólice
+POLICY_NC_FILE = os.path.join(
+    os.path.dirname(__file__), 
+    "data", "chirps_v3",
+    "chirps-v3.0.rnl.policy_RS_2025-12-01_2026-02-15.nc"
+)
+
+
+def get_tif_filename_final(year: int, month: int, day: int) -> str:
+    """Nome do arquivo TIF diário final"""
+    return f"chirps-v3.0.rnl.{year}.{month:02d}.{day:02d}.tif"
+
+
+def get_tif_filename_prelim(year: int, month: int, day: int) -> str:
+    """Nome do arquivo TIF diário preliminar"""
+    return f"chirps-v3.0.prelim.{year}.{month:02d}.{day:02d}.tif"
+
+
+def extract_point_from_tif(tif_path: str, target_lat: float, target_lon: float,
+                             target_date: str, is_prelim: bool = False) -> dict:
+    """
+    Extrai precipitação de um único TIF CHIRPS para um ponto geográfico.
+    
+    Args:
+        tif_path: Caminho para o arquivo .tif
+        target_lat: Latitude do ponto
+        target_lon: Longitude do ponto
+        target_date: Data no formato YYYY-MM-DD
+        is_prelim: True se dados preliminares
+    
+    Returns:
+        dict com: date, lat, lon, precip, pixel_lat, pixel_lon, distance_km, source, data_type
+    """
+    try:
+        import rasterio
+        from rasterio.transform import rowcol
+    except ImportError:
+        raise ImportError("rasterio é necessário para leitura de TIF. Execute: pip install rasterio")
+    
+    with rasterio.open(tif_path) as src:
+        # Calcular índice do pixel mais próximo
+        row, col = rowcol(src.transform, target_lon, target_lat, op=round)
+        
+        # Garantir que está dentro dos limites
+        row = max(0, min(row, src.height - 1))
+        col = max(0, min(col, src.width - 1))
+        
+        # Ler o valor de precipitação
+        data = src.read(1, window=rasterio.windows.Window(col, row, 1, 1))
+        precip_val = float(data[0, 0])
+        
+        # Substituir nodata por 0
+        if precip_val < -9000:
+            precip_val = 0.0
+        elif precip_val < 0:
+            precip_val = 0.0
+        
+        # Calcular lat/lon do pixel (centro)
+        pixel_lon = src.transform.c + (col + 0.5) * src.transform.a
+        pixel_lat = src.transform.f + (row + 0.5) * src.transform.e
+    
+    distance = haversine_distance(target_lat, target_lon, pixel_lat, pixel_lon)
+    
+    return {
+        "date": target_date,
+        "lat": target_lat,
+        "lon": target_lon,
+        "precip": precip_val,
+        "pixel_lat": pixel_lat,
+        "pixel_lon": pixel_lon,
+        "distance_km": distance,
+        "source": os.path.basename(tif_path),
+        "data_type": "prelim" if is_prelim else "final"
+    }
+
+
+def find_tif_for_date(year: int, month: int, day: int, 
+                       tif_base_dir: str = None) -> tuple:
+    """
+    Busca arquivo TIF para uma data específica.
+    Tenta: (1) diretório local, (2) download automático da fonte.
+    
+    Returns:
+        (path, is_prelim) ou (None, None) se não disponível
+    """
+    if tif_base_dir is None:
+        tif_base_dir = CHIRPS_V3_TIF_BASE_DIR
+    
+    # Mapear diretório por mês
+    month_dirs = {
+        (2025, 12): "dec2025",
+        (2026, 1):  "jan2026",
+        (2026, 2):  "feb2026",
+    }
+    
+    month_dir = month_dirs.get((year, month))
+    
+    if month_dir:
+        # Verificar arquivo final
+        final_fname = get_tif_filename_final(year, month, day)
+        final_path = os.path.join(tif_base_dir, month_dir, final_fname)
+        if os.path.exists(final_path):
+            return final_path, False
+        
+        # Verificar arquivo preliminar
+        prelim_fname = get_tif_filename_prelim(year, month, day)
+        prelim_path = os.path.join(tif_base_dir, month_dir, prelim_fname)
+        if os.path.exists(prelim_path):
+            return prelim_path, True
+    
+    return None, None
+
+
+def extract_chirps_from_policy_nc(
+    target_lat: float, target_lon: float,
+    required_start: str, required_end: str,
+    policy_nc_path: str = None
+) -> pd.DataFrame:
+    """
+    Extrai série temporal do NetCDF pré-processado do período da apólice.
+    Mais rápido que usar TIFs individuais.
+    
+    Returns:
+        DataFrame com colunas: time, latitude, longitude, precip,
+                               pixel_latitude, pixel_longitude, distance_km, source_file
+    """
+    if policy_nc_path is None:
+        policy_nc_path = POLICY_NC_FILE
+    
+    if not os.path.exists(policy_nc_path):
+        return pd.DataFrame()
+    
+    try:
+        import netCDF4 as nc_lib
+    except ImportError:
+        raise ImportError("netCDF4 é necessário. Execute: pip install netCDF4")
+    
+    with nc_lib.Dataset(policy_nc_path, 'r') as ds:
+        lats = ds.variables['latitude'][:]
+        lons = ds.variables['longitude'][:]
+        times = ds.variables['time'][:]
+        
+        # Encontrar índices do pixel mais próximo
+        lat_idx = int(np.argmin(np.abs(lats - target_lat)))
+        lon_idx = int(np.argmin(np.abs(lons - target_lon)))
+        
+        pixel_lat = float(lats[lat_idx])
+        pixel_lon = float(lons[lon_idx])
+        
+        # Converter tempos para datas
+        from datetime import date as date_cls, timedelta
+        epoch = date_cls(1980, 1, 1)
+        dates = [epoch + timedelta(days=int(t)) for t in times]
+        
+        # Filtrar por período
+        start_dt = datetime.strptime(required_start, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(required_end, "%Y-%m-%d").date()
+        
+        rows = []
+        precip_var = ds.variables['precip']
+        
+        for i, d in enumerate(dates):
+            if start_dt <= d <= end_dt:
+                val = float(precip_var[i, lat_idx, lon_idx])
+                if val < -9000:
+                    val = 0.0
+                elif val < 0:
+                    val = 0.0
+                
+                rows.append({
+                    "time": str(d),
+                    "latitude": target_lat,
+                    "longitude": target_lon,
+                    "precip": round(val, 4),
+                    "pixel_latitude": pixel_lat,
+                    "pixel_longitude": pixel_lon,
+                    "distance_km": round(haversine_distance(target_lat, target_lon, pixel_lat, pixel_lon), 4),
+                    "source_file": os.path.basename(policy_nc_path)
+                })
+    
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["time"] = pd.to_datetime(df["time"])
+    return df
+
+
+def extract_chirps_v3_with_tif_fallback(
+    files: list,
+    target_lat: float,
+    target_lon: float,
+    required_start: str,
+    required_end: str,
+    data_dir: str = None,
+    tif_base_dir: str = None,
+    use_policy_nc: bool = True
+) -> dict:
+    """
+    Versão aprimorada que combina:
+    1. NetCDF anual (anos históricos) 
+    2. NetCDF de período de apólice (dez/2025 a fev/2026, pré-processado)
+    3. TIFs diários como fallback
+    
+    Esta é a função recomendada para o período 2025-12-01 a 2026-02-15.
+    """
+    start_dt = datetime.strptime(required_start, "%Y-%m-%d")
+    end_dt = datetime.strptime(required_end, "%Y-%m-%d")
+    
+    # Verificar se o período inclui dados de TIF (pós-2025-11)
+    needs_tif_data = (
+        (start_dt.year == 2025 and start_dt.month >= 12) or
+        (start_dt.year >= 2026) or
+        (end_dt.year == 2025 and end_dt.month >= 12) or
+        (end_dt.year >= 2026)
+    )
+    
+    dfs = []
+    audit_rows = []
+    
+    # PARTE 1: Tentar NetCDF de período da apólice (mais eficiente)
+    if use_policy_nc and needs_tif_data and os.path.exists(POLICY_NC_FILE):
+        logger.info(f"Usando NetCDF de período da apólice: {POLICY_NC_FILE}")
+        try:
+            df_policy = extract_chirps_from_policy_nc(
+                target_lat, target_lon, required_start, required_end
+            )
+            if not df_policy.empty:
+                dfs.append(df_policy)
+                audit_rows.append({
+                    "arquivo": os.path.basename(POLICY_NC_FILE),
+                    "status": "ok",
+                    "variavel_lida": "precip",
+                    "unidade": "mm/day",
+                    "inicio_no_arquivo": "2025-12-01",
+                    "fim_no_arquivo": "2026-02-15",
+                    "dias_extraidos": len(df_policy),
+                    "observacao": f"NetCDF apólice - CHIRPS V3 final+prelim | Pixel: LAT={df_policy['pixel_latitude'].iloc[0]:.5f}, LON={df_policy['pixel_longitude'].iloc[0]:.5f}"
+                })
+                logger.info(f"[OK] NetCDF apólice → {len(df_policy)} dias extraídos")
+        except Exception as e:
+            logger.warning(f"Falha no NetCDF de apólice: {e}, tentando TIFs individuais...")
+    
+    # PARTE 2: Processar arquivos NetCDF anuais (para outros períodos)
+    if files:
+        result_nc = extract_chirps_v3(
+            files, target_lat, target_lon, required_start, required_end, data_dir
+        )
+        if result_nc.get("df") is not None and not result_nc["df"].empty:
+            dfs.append(result_nc["df"])
+            audit_rows.extend(result_nc["audit_df"].to_dict('records'))
+    
+    # Consolidar resultados
+    if not dfs:
+        return {
+            "df": pd.DataFrame(),
+            "audit_df": pd.DataFrame(audit_rows),
+            "gaps_df": pd.DataFrame(),
+            "total_precip": 0.0,
+            "missing_days": 0,
+            "status": "error",
+            "message": "Nenhum dado encontrado para o período especificado."
+        }
+    
+    full_df = pd.concat(dfs, ignore_index=True)
+    full_df["time"] = pd.to_datetime(full_df["time"])
+    full_df = full_df.sort_values("time").drop_duplicates(subset=["time"])
+    full_df = full_df.reset_index(drop=True)
+    
+    full_df["precip"] = pd.to_numeric(full_df["precip"], errors="coerce").fillna(0.0)
+    full_df.loc[full_df["precip"] < 0, "precip"] = 0.0
+    
+    expected_days = pd.date_range(start=required_start, end=required_end, freq="D")
+    existing_days = pd.to_datetime(full_df["time"]).dt.normalize()
+    missing_days_list = expected_days.difference(existing_days)
+    gaps_df = pd.DataFrame({"dias_ausentes": missing_days_list})
+    
+    total_precip = float(full_df["precip"].sum())
+    missing_days = len(missing_days_list)
+    
+    status = "ok" if missing_days == 0 else "partial"
+    if missing_days > 7:
+        status = "partial_critical"
+    
+    logger.info(f"Total precipitação: {total_precip:.2f} mm | Lacunas: {missing_days} dias")
+    
+    return {
+        "df": full_df,
+        "audit_df": pd.DataFrame(audit_rows),
+        "gaps_df": gaps_df,
+        "total_precip": total_precip,
+        "missing_days": missing_days,
+        "status": status,
+        "message": f"Extração concluída: {len(full_df)} dias, {total_precip:.2f} mm total"
+    }

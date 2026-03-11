@@ -1,0 +1,23 @@
+# ============================================================
+# CHIRPS V3.0 Paramétrico — Dependências Python
+# Sistema de Regulação de Sinistros Paramétricos
+# ============================================================
+
+# Framework web
+flask>=2.3.0,<4.0.0
+gunicorn>=21.0.0
+
+# Processamento de dados NetCDF / científico
+numpy>=1.24.0
+pandas>=2.0.0
+xarray>=2023.1.0
+h5netcdf>=1.1.0
+netcdf4>=1.6.0
+scipy>=1.10.0
+openpyxl>=3.1.0
+
+# Download de arquivos
+requests>=2.31.0
+
+# Utilitários
+python-dotenv>=1.0.0

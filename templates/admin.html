@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — CHIRPS V3.0 Paramétrico</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙</text></svg>">
+  <style>
+    :root {
+      --bg:#0f172a; --surface:#1e293b; --border:#334155;
+      --green:#22c55e; --blue:#38bdf8; --amber:#fbbf24; --red:#f87171;
+      --text:#f1f5f9; --muted:#94a3b8; --radius:10px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+    header{background:linear-gradient(135deg,#0f2027 0%,#1a3a4a 50%,#0f2027 100%);border-bottom:1px solid var(--border);padding:1.2rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;}
+    .logo{display:flex;align-items:center;gap:.75rem;}
+    .logo h1{font-size:1.15rem;font-weight:700;}
+    .logo p{font-size:.75rem;color:var(--muted);}
+    nav a{color:var(--muted);text-decoration:none;font-size:.85rem;padding:.4rem .8rem;border-radius:6px;transition:all .2s;}
+    nav a:hover{color:var(--text);background:rgba(255,255,255,.05);}
+    main{max-width:1100px;margin:0 auto;padding:2rem 1.5rem;}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1.25rem;}
+    .card-title{font-size:1rem;font-weight:600;color:var(--green);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+    .stat-box{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:8px;padding:1.2rem;}
+    .stat-box label{display:block;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.35rem;}
+    .stat-box .val{font-size:1.4rem;font-weight:700;}
+    .val-green{color:var(--green);}
+    .val-amber{color:var(--amber);}
+    .val-red{color:var(--red);}
+    table{width:100%;border-collapse:collapse;font-size:.83rem;}
+    th,td{padding:.6rem .85rem;text-align:left;border-bottom:1px solid var(--border);}
+    th{background:rgba(0,0,0,.2);font-weight:600;color:var(--muted);text-transform:uppercase;font-size:.72rem;letter-spacing:.04em;}
+    tr:hover td{background:rgba(255,255,255,.02);}
+    .badge{display:inline-block;padding:.2rem .6rem;border-radius:12px;font-size:.72rem;font-weight:600;}
+    .badge-green{background:rgba(34,197,94,.15);color:var(--green);}
+    .badge-red{background:rgba(248,113,113,.15);color:var(--red);}
+    .badge-amber{background:rgba(251,191,36,.15);color:var(--amber);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1.4rem;border-radius:8px;border:none;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .2s;text-decoration:none;}
+    .btn-green{background:linear-gradient(135deg,var(--green) 0%,#16a34a 100%);color:#000;}
+    .btn-amber{background:linear-gradient(135deg,var(--amber) 0%,#d97706 100%);color:#000;}
+    .btn-red{background:rgba(248,113,113,.2);color:var(--red);border:1px solid rgba(248,113,113,.3);}
+    .btn:hover:not(:disabled){opacity:.88;transform:translateY(-1px);}
+    .btn:disabled{opacity:.4;cursor:not-allowed;}
+    .alert{padding:.85rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;display:flex;align-items:flex-start;gap:.6rem;}
+    .alert-info{background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.3);color:var(--blue);}
+    .alert-warn{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--amber);}
+    .alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--green);}
+    .progress-bar{height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-top:.5rem;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .3s;}
+    .source-url{font-family:monospace;font-size:.8rem;background:rgba(0,0,0,.3);padding:.4rem .7rem;border-radius:4px;color:var(--blue);word-break:break-all;}
+    .year-card{border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:.75rem;}
+    .year-card h3{color:var(--text);font-size:1rem;margin-bottom:.6rem;}
+    @media(max-width:700px){.grid-2{grid-template-columns:1fr;}main{padding:1rem;}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div>
+      <h1>⚙ Painel de Administração — CHIRPS V3.0</h1>
+      <p>Gerenciamento de arquivos NetCDF locais</p>
+    </div>
+  </div>
+  <nav>
+    <a href="/">🏠 Sistema Principal</a>
+  </nav>
+</header>
+
+<main>
+  <!-- ── INFO ─────────────────────────────────────── -->
+  <div class="alert alert-info">
+    <span>ℹ</span>
+    <div>
+      <strong>Fonte CHIRPS V3.0:</strong><br>
+      <code class="source-url">{{ chirps_url }}</code><br>
+      <span style="color:var(--muted);font-size:.8rem;">
+        Diretório local: <code>{{ data_dir }}</code><br>
+        Regra de atualização: Arquivos são atualizados após o dia 15 de cada mês (dados do mês anterior ficam disponíveis ~2 dias após o início do mês seguinte).
+      </span>
+    </div>
+  </div>
+
+  <!-- ── STATUS ARQUIVOS ──────────────────────────── -->
+  <div class="card">
+    <div class="card-title">📁 Status dos Arquivos CHIRPS V3 Locais</div>
+    <div id="statusArea">
+      {% if data_status %}
+        {% for year, files in data_status.items() %}
+          {% if files %}
+            <div class="year-card">
+              <h3>📂 Ano {{ year }}</h3>
+              {% if files is mapping %}
+                <table>
+                  <thead>
+                    <tr><th>Arquivo</th><th>Tamanho</th><th>Última Modificação</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {% for fname, info in files.items() %}
+                      <tr>
+                        <td style="font-family:monospace;font-size:.78rem;">{{ fname }}</td>
+                        <td>{{ info.size_mb }} MB</td>
+                        <td>{{ info.last_modified }}</td>
+                        <td>
+                          {% if info.valid %}
+                            <span class="badge badge-green">✅ Válido</span>
+                          {% else %}
+                            <span class="badge badge-red">❌ Inválido</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% else %}
+                <p style="color:var(--muted);font-size:.85rem;">{{ files }}</p>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if not data_status %}
+          <div class="alert alert-warn"><span>⚠</span><div>Nenhum arquivo CHIRPS V3 encontrado localmente. Use o painel abaixo para fazer o download.</div></div>
+        {% endif %}
+      {% else %}
+        <div class="alert alert-warn"><span>⚠</span><div>Nenhum arquivo disponível. Faça o download abaixo.</div></div>
+      {% endif %}
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:.75rem;flex-wrap:wrap;">
+      <button class="btn btn-green" onclick="refreshStatus()">🔄 Atualizar Status</button>
+      <button class="btn btn-amber" onclick="autoUpdate()">⬆️ Verificar/Atualizar Tudo</button>
+    </div>
+  </div>
+
+  <!-- ── DOWNLOAD MANUAL ──────────────────────────── -->
+  <div class="card">
+    <div class="card-title">📥 Download Manual de Arquivos CHIRPS V3</div>
+    <div class="alert alert-warn">
+      <span>⚠</span>
+      <div>
+        <strong>Tamanho dos arquivos:</strong> Cada arquivo anual tem ~300-500 MB.
+        O download pode demorar vários minutos dependendo da velocidade de internet.
+        Os dados ficam disponíveis no diretório <code>data/chirps_v3/{ano}/</code>.
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <label style="display:block;color:var(--muted);font-size:.8rem;margin-bottom:.4rem;">Ano para Download</label>
+        <select id="downloadYear" style="width:100%;padding:.6rem;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:.5rem;">
+        <button class="btn btn-green" onclick="startDownload(false)" style="flex:1;">📥 Baixar Ano</button>
+        <button class="btn btn-amber btn-sm" onclick="startDownload(true)" title="Forçar re-download mesmo se arquivo existe">🔄 Forçar</button>
+      </div>
+    </div>
+
+    <div id="downloadStatus" style="margin-top:1rem;display:none;">
+      <div class="alert alert-info">
+        <span>⬇</span>
+        <div>
+          <strong id="dlTitle">Iniciando...</strong><br>
+          <span id="dlMsg" style="font-size:.85rem;"></span>
+          <div class="progress-bar"><div class="progress-fill" id="dlBar" style="width:5%;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="downloadResult" style="display:none;margin-top:.75rem;"></div>
+  </div>
+
+  <!-- ── REGRA DE ATUALIZAÇÃO ──────────────────────── -->
+  <div class="card">
+    <div class="card-title">🗓 Regra de Atualização Automática</div>
+    <table>
+      <thead><tr><th>Condição</th><th>Ação</th><th>Motivo</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Dia ≥ 15 do mês</td>
+          <td><span class="badge badge-amber">Atualizar ano corrente</span></td>
+          <td>Dados finais do mês anterior ficam disponíveis ~dia 15</td>
+        </tr>
+        <tr>
+          <td>Arquivo do ano passado ausente</td>
+          <td><span class="badge badge-green">Baixar automaticamente</span></td>
+          <td>Dados históricos completos sempre necessários</td>
+        </tr>
+        <tr>
+          <td>Chegada do ano N+1</td>
+          <td><span class="badge badge-amber">Criar pasta ano N+1</span></td>
+          <td>Preparar para dados do novo ano (ex: 2027 em 2027)</td>
+        </tr>
+        <tr>
+          <td>Arquivo < 1 MB</td>
+          <td><span class="badge badge-red">Marcar como inválido</span></td>
+          <td>Download corrompido ou incompleto</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="alert alert-info" style="margin-top:1rem;">
+      <span>💡</span>
+      <div>
+        <strong>Automação:</strong> Configure um cron job ou GitHub Actions para executar
+        <code>GET /api/data/update</code> todo dia 15 de cada mês para manter os dados atualizados.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VALIDAÇÃO DE SCRIPT ──────────────────────── -->
+  <div class="card">
+    <div class="card-title">🔬 Validação Técnica — Compatibilidade com Script V3</div>
+    <p style="color:var(--muted);font-size:.875rem;margin-bottom:1rem;">
+      O sistema utiliza exatamente a mesma lógica de extração do script de validação
+      fornecido no Anexo 2, com as seguintes melhorias para produção:
+    </p>
+    <table>
+      <thead><tr><th>Funcionalidade</th><th>Script Original (Anexo 2)</th><th>Sistema CHIRPS V3 Web</th></tr></thead>
+      <tbody>
+        <tr><td>Fonte de dados</td><td>Arquivos locais (<code>C:\Users\...</code>)</td><td>✅ Arquivos no servidor + auto-download</td></tr>
+        <tr><td>Detecção de coordenadas</td><td>Constante hard-coded</td><td>✅ Extração automática do HTML</td></tr>
+        <tr><td>Engines NetCDF</td><td>h5netcdf → netcdf4 → scipy</td><td>✅ Mesmo fallback automático</td></tr>
+        <tr><td>Ajuste longitude 0-360</td><td>✅ Implementado</td><td>✅ Implementado</td></tr>
+        <tr><td>Haversine (distância pixel)</td><td>✅ Vetorizado NumPy</td><td>✅ Implementado com auditoria</td></tr>
+        <tr><td>Detecção de lacunas</td><td>✅ Implementado</td><td>✅ Implementado + exportado</td></tr>
+        <tr><td>Exportação Excel</td><td>dados + auditoria + lacunas</td><td>✅ dados + auditoria + lacunas + resumo</td></tr>
+        <tr><td>Período do contrato</td><td>2025-12-01 a 2026-01-31</td><td>✅ Extrai dinamicamente do HTML</td></tr>
+        <tr><td>Versão CHIRPS</td><td>V3.0 ✓</td><td>✅ V3.0 — fonte CHC-UCSB</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── LOG ─────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">📋 Log de Operações</div>
+    <div id="logArea" style="background:rgba(0,0,0,.4);border-radius:6px;padding:1rem;font-family:monospace;font-size:.78rem;max-height:200px;overflow-y:auto;color:var(--muted);">
+      <div>Sistema CHIRPS V3.0 iniciado</div>
+      <div>Fonte: {{ chirps_url }}</div>
+      <div>Aguardando operações...</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+function log(msg) {
+  const area = document.getElementById('logArea');
+  const time = new Date().toLocaleTimeString('pt-BR');
+  area.innerHTML += `<div>[${time}] ${msg}</div>`;
+  area.scrollTop = area.scrollHeight;
+}
+
+async function refreshStatus() {
+  log('Atualizando status dos arquivos...');
+  try {
+    const resp = await fetch('/api/data/status');
+    const data = await resp.json();
+    log(`Status: ${data.total_files} arquivo(s), ${data.total_size_mb} MB total`);
+    // Reload page to show updated status
+    window.location.reload();
+  } catch(e) {
+    log(`Erro: ${e.message}`);
+  }
+}
+
+async function startDownload(force) {
+  const year = parseInt(document.getElementById('downloadYear').value);
+  log(`Iniciando download CHIRPS V3 ${year}${force ? ' (forçado)' : ''}...`);
+
+  document.getElementById('downloadStatus').style.display = 'block';
+  document.getElementById('downloadResult').style.display = 'none';
+  document.getElementById('dlTitle').textContent = `Baixando ${year}...`;
+  document.getElementById('dlMsg').textContent = 'Conectando ao CHC-UCSB...';
+  document.getElementById('dlBar').style.width = '5%';
+
+  try {
+    const resp = await fetch('/api/data/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, force })
+    });
+    const data = await resp.json();
+
+    if (!data.task_id) {
+      log(`Erro: ${data.error}`);
+      return;
+    }
+
+    // Poll progress
+    const interval = setInterval(async () => {
+      try {
+        const statusResp = await fetch(`/api/task/${data.task_id}`);
+        const task = await statusResp.json();
+
+        document.getElementById('dlMsg').textContent = task.message;
+        document.getElementById('dlBar').style.width = `${task.progress || 10}%`;
+        log(task.message);
+
+        if (task.status === 'completed') {
+          clearInterval(interval);
+          document.getElementById('dlBar').style.width = '100%';
+          document.getElementById('dlTitle').textContent = '✅ Download Concluído!';
+          document.getElementById('downloadResult').innerHTML = `
+            <div class="alert alert-success">
+              <span>✅</span><div>${task.message || 'Download concluído com sucesso!'}</div>
+            </div>`;
+          document.getElementById('downloadResult').style.display = 'block';
+          log('Download concluído!');
+        } else if (task.status === 'error') {
+          clearInterval(interval);
+          document.getElementById('dlTitle').textContent = '❌ Erro no Download';
+          document.getElementById('downloadResult').innerHTML = `
+            <div class="alert" style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#f87171;">
+              <span>⚠</span><div>${task.error || 'Erro desconhecido'}</div>
+            </div>`;
+          document.getElementById('downloadResult').style.display = 'block';
+          log(`Erro: ${task.error}`);
+        }
+      } catch(e) {
+        clearInterval(interval);
+        log(`Erro de polling: ${e.message}`);
+      }
+    }, 3000);
+
+  } catch(e) {
+    log(`Erro: ${e.message}`);
+  }
+}
+
+async function autoUpdate() {
+  log('Verificando e atualizando todos os arquivos...');
+  try {
+    const resp = await fetch('/api/data/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await resp.json();
+    if (data.task_id) {
+      log(`Tarefa de atualização iniciada: ${data.task_id}`);
+      const interval = setInterval(async () => {
+        const statusResp = await fetch(`/api/task/${data.task_id}`);
+        const task = await statusResp.json();
+        log(task.message);
+        if (task.status === 'completed' || task.status === 'error') {
+          clearInterval(interval);
+          if (task.status === 'completed') {
+            log('✅ Atualização automática concluída!');
+            setTimeout(() => window.location.reload(), 2000);
+          }
+        }
+      }, 3000);
+    }
+  } catch(e) {
+    log(`Erro: ${e.message}`);
+  }
+}
+</script>
+</body>
+</html>

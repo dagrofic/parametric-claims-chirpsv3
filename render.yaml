@@ -1,0 +1,36 @@
+# ============================================================
+# render.yaml — Deploy automático no Render.com
+# Sistema de Regulação de Sinistros Paramétricos — CHIRPS V3.0
+# ============================================================
+
+services:
+  - type: web
+    name: claimsparametricchirpsv3
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon          # Mais próximo da fonte de dados CHC-UCSB (California)
+    plan: standard          # Standard para armazenamento persistente
+    
+    # ── Variáveis de Ambiente ───────────────────────────────
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: FLASK_DEBUG
+        value: false
+      - key: CHIRPS_DATA_DIR
+        value: /data/chirps_v3
+      - key: SECRET_KEY
+        generateValue: true   # Render gera automaticamente
+
+    # ── Disco Persistente (CRÍTICO para arquivos NetCDF ~500MB/ano) ──
+    disk:
+      name: chirps-v3-data
+      mountPath: /data
+      sizeGB: 10             # 10GB: comporta ~15 anos de dados CHIRPS V3
+
+    # ── Health Check ────────────────────────────────────────
+    healthCheckPath: /
+
+    # ── Auto-deploy ─────────────────────────────────────────
+    autoDeploy: true
+    branch: main

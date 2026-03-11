@@ -1,0 +1,154 @@
+name: CHIRPS V3 — Atualização Automática de Dados
+
+on:
+  # Executa todo dia 15 de cada mês às 08:00 UTC (05:00 Brasília)
+  schedule:
+    - cron: '0 8 15 * *'
+  
+  # Permite execução manual pelo painel GitHub Actions
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Ano para atualizar (deixe vazio para automático)'
+        required: false
+        type: string
+      force:
+        description: 'Forçar re-download mesmo se arquivo existe'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # Job 1: Verificar disponibilidade dos dados
+  # ══════════════════════════════════════════════════════════
+  check-data:
+    name: 🔍 Verificar Dados CHIRPS V3
+    runs-on: ubuntu-latest
+    
+    outputs:
+      current_year: ${{ steps.dates.outputs.current_year }}
+      prev_year: ${{ steps.dates.outputs.prev_year }}
+      current_month: ${{ steps.dates.outputs.current_month }}
+      annual_url: ${{ steps.urls.outputs.annual_url }}
+      file_available: ${{ steps.check.outputs.available }}
+    
+    steps:
+      - name: 📅 Calcular datas
+        id: dates
+        run: |
+          YEAR="${{ inputs.year }}"
+          if [ -z "$YEAR" ]; then
+            YEAR=$(date +%Y)
+          fi
+          PREV_YEAR=$((YEAR - 1))
+          MONTH=$(date +%m)
+          echo "current_year=$YEAR" >> $GITHUB_OUTPUT
+          echo "prev_year=$PREV_YEAR" >> $GITHUB_OUTPUT
+          echo "current_month=$MONTH" >> $GITHUB_OUTPUT
+          echo "📅 Ano: $YEAR | Mês: $MONTH | Ano anterior: $PREV_YEAR"
+      
+      - name: 🔗 Gerar URLs CHIRPS V3
+        id: urls
+        run: |
+          YEAR="${{ steps.dates.outputs.current_year }}"
+          URL="https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/chirps-v3.0.rnl.${YEAR}.days_p05.nc"
+          echo "annual_url=$URL" >> $GITHUB_OUTPUT
+          echo "🌐 URL: $URL"
+      
+      - name: ✅ Verificar disponibilidade do arquivo
+        id: check
+        run: |
+          URL="${{ steps.urls.outputs.annual_url }}"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --head "$URL")
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✅ Arquivo disponível: $URL"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Arquivo não disponível (HTTP $STATUS)"
+          fi
+
+  # ══════════════════════════════════════════════════════════
+  # Job 2: Trigger atualização no Render
+  # ══════════════════════════════════════════════════════════
+  trigger-update:
+    name: 🚀 Acionar Atualização no Render
+    runs-on: ubuntu-latest
+    needs: check-data
+    if: needs.check-data.outputs.file_available == 'true'
+    
+    steps:
+      - name: 📡 Chamar API do sistema
+        run: |
+          YEAR="${{ needs.check-data.outputs.current_year }}"
+          FORCE="${{ inputs.force || 'false' }}"
+          
+          # URL do sistema hospedado
+          SYSTEM_URL="${{ secrets.RENDER_APP_URL }}"
+          
+          if [ -z "$SYSTEM_URL" ]; then
+            echo "⚠️ RENDER_APP_URL não configurado. Configure nos Secrets do GitHub."
+            echo "💡 Vá em: Settings > Secrets > Actions > New secret"
+            echo "   Nome: RENDER_APP_URL"
+            echo "   Valor: https://claimsparametricchirpsv3.onrender.com"
+            exit 0
+          fi
+          
+          echo "🚀 Acionando atualização em: $SYSTEM_URL"
+          
+          RESPONSE=$(curl -s -X POST "$SYSTEM_URL/api/data/update" \
+            -H "Content-Type: application/json" \
+            -d "{\"years\": [$YEAR], \"force\": $FORCE}" \
+            -w "\n%{http_code}" \
+            --max-time 30)
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          
+          echo "📋 Resposta HTTP: $HTTP_CODE"
+          echo "📋 Corpo: $BODY"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Atualização acionada com sucesso!"
+          else
+            echo "⚠️ Resposta inesperada: $HTTP_CODE"
+          fi
+      
+      - name: 📊 Verificar status após download
+        run: |
+          SYSTEM_URL="${{ secrets.RENDER_APP_URL }}"
+          if [ -z "$SYSTEM_URL" ]; then exit 0; fi
+          
+          echo "⏳ Aguardando 60 segundos para download completar..."
+          sleep 60
+          
+          RESPONSE=$(curl -s "$SYSTEM_URL/api/data/status")
+          echo "📋 Status atual: $RESPONSE"
+
+  # ══════════════════════════════════════════════════════════
+  # Job 3: Notificação (opcional)
+  # ══════════════════════════════════════════════════════════
+  notify:
+    name: 📬 Notificação
+    runs-on: ubuntu-latest
+    needs: [check-data, trigger-update]
+    if: always()
+    
+    steps:
+      - name: 📋 Resumo da execução
+        run: |
+          echo "============================================"
+          echo "CHIRPS V3 — RELATÓRIO DE ATUALIZAÇÃO"
+          echo "============================================"
+          echo "Data/Hora: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+          echo "Ano processado: ${{ needs.check-data.outputs.current_year }}"
+          echo "Arquivo disponível: ${{ needs.check-data.outputs.file_available }}"
+          echo "Update job: ${{ needs.trigger-update.result }}"
+          echo "============================================"
+          echo ""
+          echo "URL Fonte: ${{ needs.check-data.outputs.annual_url }}"
+          echo ""
+          echo "Para monitorar o progresso, acesse:"
+          echo "https://github.com/${{ github.repository }}/actions"

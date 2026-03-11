@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema de Regulação de Sinistros Paramétricos — CHIRPS V3.0</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌧</text></svg>">
+  <style>
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --green:    #22c55e;
+      --green2:   #16a34a;
+      --blue:     #38bdf8;
+      --amber:    #fbbf24;
+      --red:      #f87171;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --radius:   10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0f2027 0%, #1a3a4a 50%, #0f2027 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .logo { display:flex; align-items:center; gap:.75rem; }
+    .logo-icon { font-size:2rem; }
+    .logo-text h1 { font-size:1.25rem; font-weight:700; color:var(--text); }
+    .logo-text p  { font-size:.75rem; color:var(--muted); }
+    .badge {
+      background: rgba(34,197,94,.15);
+      color: var(--green);
+      border: 1px solid rgba(34,197,94,.3);
+      padding:.25rem .75rem;
+      border-radius:20px;
+      font-size:.75rem;
+      font-weight:600;
+      white-space:nowrap;
+    }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: .85rem;
+      padding: .4rem .8rem;
+      border-radius: 6px;
+      transition: all .2s;
+    }
+    nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    /* ── Main ───────────────────────────────────────────── */
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+    /* ── Cards ──────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--green);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    /* ── Upload area ────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed rgba(34,197,94,.4);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: rgba(34,197,94,.03);
+      margin-bottom: 1rem;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--green);
+      background: rgba(34,197,94,.08);
+    }
+    .upload-zone input[type=file] { display:none; }
+    .upload-zone .icon { font-size:2.5rem; margin-bottom:.5rem; }
+    .upload-zone p { color: var(--muted); font-size:.875rem; }
+    .upload-zone .hint { font-size:.75rem; color: var(--green); margin-top:.25rem; }
+    /* ── Textarea ───────────────────────────────────────── */
+    textarea {
+      width: 100%;
+      height: 160px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem;
+      color: var(--text);
+      font-family: 'Courier New', monospace;
+      font-size: .8rem;
+      resize: vertical;
+      transition: border-color .2s;
+    }
+    textarea:focus { outline:none; border-color: var(--green); }
+    /* ── Buttons ────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      padding: .75rem 1.75rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 600;
+      transition: all .2s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--green) 0%, var(--green2) 100%);
+      color: #000;
+      width: 100%;
+      margin-top: .75rem;
+    }
+    .btn-primary:hover:not(:disabled) { opacity:.88; transform:translateY(-1px); }
+    .btn-primary:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-blue {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: #fff;
+      margin-top: .75rem;
+    }
+    .btn-amber {
+      background: linear-gradient(135deg, var(--amber) 0%, #d97706 100%);
+      color: #000;
+      width: 100%;
+      margin-top: .75rem;
+    }
+    .btn-sm {
+      padding: .4rem .9rem;
+      font-size: .8rem;
+    }
+    /* ── Grid de resultados ─────────────────────────────── */
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .75rem;
+      margin-top: .75rem;
+    }
+    .result-item {
+      background: rgba(0,0,0,.25);
+      padding: .85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .result-item label {
+      display: block;
+      font-size: .7rem;
+      color: var(--muted);
+      margin-bottom: .25rem;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .result-item .val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .result-item .val.big { font-size: 1.4rem; color: var(--green); }
+    .result-item .val.warn { color: var(--amber); }
+    .result-item .val.good { color: var(--green); }
+    .result-item .val.bad  { color: var(--red); }
+    /* ── Status badge ───────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .35rem .9rem;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: .9rem;
+    }
+    .status-green { background:rgba(34,197,94,.15); color:var(--green); }
+    .status-red   { background:rgba(248,113,113,.15); color:var(--red); }
+    .status-amber { background:rgba(251,191,36,.15); color:var(--amber); }
+    /* ── Tabela ──────────────────────────────────────────── */
+    .table-wrap { overflow-x:auto; max-height:400px; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.83rem; }
+    thead { position:sticky; top:0; background:var(--surface); z-index:2; }
+    th, td { padding:.55rem .75rem; text-align:left; border-bottom:1px solid var(--border); }
+    th { font-weight:600; color:var(--muted); text-transform:uppercase; font-size:.72rem; letter-spacing:.04em; }
+    tr:hover td { background:rgba(255,255,255,.03); }
+    td.num { text-align:right; font-family:'Courier New',monospace; }
+    tr.total-row td { font-weight:700; color:var(--green); background:rgba(34,197,94,.06); }
+    /* ── Input ───────────────────────────────────────────── */
+    .input-group { margin-bottom: .75rem; }
+    .input-group label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:.35rem; }
+    .input-group input {
+      width:100%;
+      padding:.6rem .75rem;
+      background:rgba(0,0,0,.3);
+      border:1px solid var(--border);
+      border-radius:6px;
+      color:var(--text);
+      font-size:.9rem;
+    }
+    .input-group input:focus { outline:none; border-color:var(--green); }
+    /* ── Loading ─────────────────────────────────────────── */
+    .loading { display:none; text-align:center; padding:2.5rem 1rem; }
+    .loading.show { display:block; }
+    .spinner {
+      width:44px; height:44px;
+      border:3px solid rgba(255,255,255,.1);
+      border-top-color:var(--green);
+      border-radius:50%;
+      animation:spin 1s linear infinite;
+      margin:0 auto 1rem;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    /* ── Alert ───────────────────────────────────────────── */
+    .alert {
+      padding:.85rem 1rem;
+      border-radius:8px;
+      margin-bottom:1rem;
+      font-size:.875rem;
+      display:flex;
+      align-items:flex-start;
+      gap:.6rem;
+    }
+    .alert-error { background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.3); color:var(--red); }
+    .alert-warn  { background:rgba(251,191,36,.1);  border:1px solid rgba(251,191,36,.3);  color:var(--amber); }
+    .alert-info  { background:rgba(56,189,248,.1);  border:1px solid rgba(56,189,248,.3);  color:var(--blue); }
+    /* ── Section ─────────────────────────────────────────── */
+    .section-num {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:22px; height:22px;
+      background:var(--green);
+      color:#000;
+      border-radius:50%;
+      font-size:.75rem;
+      font-weight:700;
+      margin-right:.4rem;
+      flex-shrink:0;
+    }
+    /* ── Download notice ─────────────────────────────────── */
+    .download-notice {
+      background: rgba(251,191,36,.08);
+      border: 1px solid rgba(251,191,36,.25);
+      border-radius: 10px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .download-notice h3 { color:var(--amber); font-size:.95rem; margin-bottom:.6rem; }
+    .download-notice p  { color:var(--muted); font-size:.85rem; margin-bottom:.75rem; }
+    .download-progress  { height:8px; background:rgba(255,255,255,.1); border-radius:4px; overflow:hidden; }
+    .download-progress-bar { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); width:0%; transition:width .3s; }
+    /* ── Responsive ──────────────────────────────────────── */
+    @media(max-width:600px){
+      header { flex-direction:column; align-items:flex-start; }
+      main { padding:1rem; }
+      .result-grid { grid-template-columns:1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌧</div>
+    <div class="logo-text">
+      <h1>Sistema de Regulação de Sinistros Paramétricos</h1>
+      <p>Cobertura Paramétrica de Precipitação — CHIRPS V3.0</p>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <span class="badge">CHIRPS V3.0 ✓</span>
+    <nav>
+      <a href="/admin">⚙ Dados / Admin</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══════════════════════ MAIN ════════════════════════ -->
+<main>
+
+  <!-- ── INFO BAR ─────────────────────────────────────── -->
+  <div class="alert alert-info" style="margin-bottom:1.25rem;">
+    <span>ℹ</span>
+    <div>
+      <strong>Fonte de Dados:</strong> CHIRPS V3.0 — CHC/UCSB
+      (<a href="{{chirps_url}}" target="_blank" style="color:var(--blue);">{{chirps_url}}</a>).
+      Arquivos NetCDF armazenados localmente em <code>{{data_dir}}</code>.
+    </div>
+  </div>
+
+  <!-- ── CARD 1: Upload ──────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">
+      <span class="section-num">1</span>
+      Carregar Relatório HTML da Apólice
+    </div>
+
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".html,.htm" onchange="handleFile(event)">
+      <div class="icon">📂</div>
+      <p>Clique ou arraste o arquivo HTML da apólice aqui</p>
+      <p class="hint">Formatos aceitos: .html — Gerado pelo R/Shiny "Parametric Rain Cover"</p>
+    </div>
+
+    <div style="text-align:center;color:var(--muted);margin:.5rem 0;font-size:.8rem;">ou cole o conteúdo HTML manualmente</div>
+
+    <textarea id="htmlContent" placeholder="Cole aqui o conteúdo HTML da apólice gerada pelo R... (Period cover : From : YYYY-MM-DD to : YYYY-MM-DD)"></textarea>
+
+    <button class="btn btn-primary" id="btnProcess" onclick="processRegulation()">
+      🔍 Processar Regulação — CHIRPS V3.0
+    </button>
+  </div>
+
+  <!-- ── LOADING ─────────────────────────────────────── -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p id="loadingMsg" style="color:var(--text);font-size:1rem;">Extraindo dados CHIRPS V3.0...</p>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.5rem;">Lendo arquivo NetCDF local — rápido e preciso.</p>
+  </div>
+
+  <!-- ── DOWNLOAD NOTICE ────────────────────────────── -->
+  <div class="download-notice" id="downloadNotice" style="display:none;">
+    <h3>📥 Download de Dados Necessário</h3>
+    <p id="downloadMsg">Arquivos CHIRPS V3 não encontrados para o período solicitado.</p>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-amber btn-sm" id="btnDownload" onclick="downloadData()" style="width:auto;">
+        📥 Baixar Dados CHIRPS V3
+      </button>
+      <a href="/admin" class="btn btn-sm" style="background:var(--border);color:var(--text);">⚙ Painel Admin</a>
+    </div>
+    <div style="margin-top:.75rem;display:none;" id="dlProgressWrap">
+      <p id="dlProgressMsg" style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem;">Baixando...</p>
+      <div class="download-progress"><div class="download-progress-bar" id="dlProgressBar"></div></div>
+    </div>
+  </div>
+
+  <!-- ── ERRO ────────────────────────────────────────── -->
+  <div class="alert alert-error" id="errorBox" style="display:none;">
+    <span>⚠</span>
+    <div id="errorMsg"></div>
+  </div>
+
+  <!-- ═══════════════ RESULTADOS ═════════════════════ -->
+  <div id="results" style="display:none;">
+
+    <!-- ── Parâmetros extraídos ──────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="section-num">2</span> Parâmetros Extraídos da Apólice</div>
+      <div class="result-grid" id="paramsGrid"></div>
+    </div>
+
+    <!-- ── Dados CHIRPS V3 ───────────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="section-num">3</span> Dados de Precipitação — CHIRPS V3.0 (NetCDF Local)</div>
+      <div id="dataInfo" style="margin-bottom:1rem;"></div>
+      <div class="table-wrap" id="dataTable"></div>
+    </div>
+
+    <!-- ── Cálculo de Sinistro ───────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="section-num">4</span> Cálculo do Sinistro Paramétrico</div>
+      <div class="result-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin-bottom:1rem;" id="calcInputs">
+        <div class="input-group">
+          <label>Limite de Indenização (BRL)</label>
+          <input type="number" id="inputLimit" placeholder="Ex: 740000" step="0.01">
+        </div>
+        <div class="input-group">
+          <label>Tick (BRL / mm)</label>
+          <input type="number" id="inputTick" placeholder="Ex: 1644.44" step="0.01">
+        </div>
+        <div class="input-group">
+          <label>Franquia (%)</label>
+          <input type="number" id="inputDeductible" placeholder="0" value="0" min="0" max="100" step="0.1">
+        </div>
+      </div>
+      <button class="btn btn-amber" onclick="calcularSinistro()">⚡ Calcular Sinistro</button>
+    </div>
+
+    <!-- ── Resultado Final ───────────────────────────── -->
+    <div class="card" id="claimCard" style="display:none;">
+      <div class="card-title"><span class="section-num">5</span> Resultado da Regulação</div>
+      <div id="claimResult"></div>
+    </div>
+
+    <!-- ── Download ─────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="section-num">6</span> Exportar Relatório</div>
+      <p style="color:var(--muted);font-size:.875rem;margin-bottom:.75rem;">
+        Baixe o relatório Excel com dados, auditoria e resultado do sinistro.
+        Inclui fonte CHIRPS V3.0, coordenadas precisas e rastreabilidade completa.
+      </p>
+      <button class="btn btn-blue" onclick="downloadExcel()">
+        📊 Baixar Relatório Excel (CHIRPS V3.0)
+      </button>
+    </div>
+
+  </div><!-- /#results -->
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════
+let STATE = {
+  htmlContent: '',
+  params: null,
+  dailyData: [],
+  totalPrecip: 0,
+  claim: null,
+  yearsNeeded: []
+};
+
+// ═══════════════════════════════════════════════════════════
+// UPLOAD / DRAG & DROP
+// ═══════════════════════════════════════════════════════════
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+});
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (file) readFile(file);
+}
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('htmlContent').value = e.target.result;
+    dropZone.querySelector('p').textContent = `✅ ${file.name} carregado (${(file.size/1024).toFixed(1)} KB)`;
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESSAR REGULAÇÃO
+// ═══════════════════════════════════════════════════════════
+async function processRegulation() {
+  const html = document.getElementById('htmlContent').value;
+  if (!html.trim()) {
+    showError('Por favor, carregue ou cole o HTML da apólice primeiro.');
+    return;
+  }
+  STATE.htmlContent = html;
+
+  showLoading(true);
+  hideAll();
+  document.getElementById('btnProcess').disabled = true;
+
+  try {
+    const resp = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html })
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      if (data.action_required === 'download') {
+        STATE.yearsNeeded = data.years_needed || [];
+        showDownloadNotice(data.message, STATE.yearsNeeded);
+      } else {
+        showError(data.error || 'Erro desconhecido no servidor');
+      }
+      return;
+    }
+
+    // Sucesso
+    STATE.params = data.params;
+    STATE.dailyData = data.daily_data || [];
+    STATE.totalPrecip = data.total_precip || 0;
+    STATE.claim = data.claim || {};
+
+    renderParams(data);
+    renderDataTable(data);
+
+    // Pré-preencher inputs se tiver parâmetros
+    if (data.params.limit)       document.getElementById('inputLimit').value = data.params.limit;
+    if (data.params.tick)        document.getElementById('inputTick').value = data.params.tick;
+    if (data.params.deductible_pct) document.getElementById('inputDeductible').value = data.params.deductible_pct;
+
+    // Auto-calcular se tiver todos parâmetros
+    if (data.params.strike && data.params.limit && data.params.tick) {
+      calcularSinistro();
+    }
+
+    document.getElementById('results').style.display = 'block';
+
+  } catch(e) {
+    showError(`Erro de comunicação: ${e.message}`);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnProcess').disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDERIZAR PARÂMETROS
+// ═══════════════════════════════════════════════════════════
+function renderParams(data) {
+  const p = data.params;
+  const unit = p.type_of_cover === 'precipitation' ? 'mm' : '°C';
+  const items = [
+    ['Segurado', p.insured || 'N/A'],
+    ['Fonte de Dados', 'CHIRPS V3.0 ✓'],
+    ['Tipo de Cobertura', p.cover_description || 'Déficit de Precipitação'],
+    ['Período Início', p.period_start || 'N/A'],
+    ['Período Fim', p.period_end || 'N/A'],
+    ['Latitude Contratual', p.latitude ? p.latitude.toFixed(5) : 'N/A'],
+    ['Longitude Contratual', p.longitude ? p.longitude.toFixed(5) : 'N/A'],
+    ['Strike', p.strike ? `${p.strike} ${unit}` : 'N/A'],
+    ['Exit Point', p.exit_point !== undefined ? `${p.exit_point} ${unit}` : '0 mm'],
+    ['Dias com dados', data.daily_data ? data.daily_data.length : 0],
+    ['Lacunas (dias)', data.missing_days || 0],
+    ['Status extração', data.data_status || 'ok']
+  ];
+
+  const grid = document.getElementById('paramsGrid');
+  grid.innerHTML = items.map(([label, val]) => `
+    <div class="result-item">
+      <label>${label}</label>
+      <div class="val">${val}</div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDERIZAR TABELA DE DADOS
+// ═══════════════════════════════════════════════════════════
+function renderDataTable(data) {
+  const rows = data.daily_data || [];
+  const total = data.total_precip || 0;
+  const filesUsed = data.files_used || [];
+
+  document.getElementById('dataInfo').innerHTML = `
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem;">
+      <div class="result-item" style="flex:0 0 auto;">
+        <label>Total Precipitação</label>
+        <div class="val big">${total.toFixed(2)} mm</div>
+      </div>
+      <div class="result-item" style="flex:0 0 auto;">
+        <label>Dias com dados</label>
+        <div class="val">${rows.length}</div>
+      </div>
+      <div class="result-item" style="flex:1 1 200px;">
+        <label>Arquivo(s) CHIRPS V3 utilizado(s)</label>
+        <div class="val" style="font-size:.8rem;font-family:monospace;">${filesUsed.join('<br>')}</div>
+      </div>
+    </div>
+  `;
+
+  let html = `<table>
+    <thead><tr>
+      <th>Data</th>
+      <th class="num">Precipitação (mm)</th>
+      <th class="num">Pixel Lat</th>
+      <th class="num">Pixel Lon</th>
+      <th class="num">Dist. (km)</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.date}</td>
+      <td class="num">${r.precip.toFixed(4)}</td>
+      <td class="num">${r.pixel_lat ? r.pixel_lat.toFixed(5) : '-'}</td>
+      <td class="num">${r.pixel_lon ? r.pixel_lon.toFixed(5) : '-'}</td>
+      <td class="num">${r.distance_km !== undefined ? r.distance_km.toFixed(4) : '-'}</td>
+    </tr>`;
+  });
+
+  html += `</tbody>
+    <tfoot><tr class="total-row">
+      <td><strong>TOTAL</strong></td>
+      <td class="num"><strong>${total.toFixed(4)}</strong></td>
+      <td colspan="3"></td>
+    </tr></tfoot>
+  </table>`;
+
+  document.getElementById('dataTable').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CALCULAR SINISTRO
+// ═══════════════════════════════════════════════════════════
+async function calcularSinistro() {
+  if (!STATE.params) {
+    showError('Processe uma apólice primeiro.');
+    return;
+  }
+
+  const limit = parseFloat(document.getElementById('inputLimit').value) || STATE.params.limit || 0;
+  const tick  = parseFloat(document.getElementById('inputTick').value)  || STATE.params.tick  || 0;
+  const ded   = parseFloat(document.getElementById('inputDeductible').value) || 0;
+
+  if (!limit || !tick) {
+    if (!STATE.params.strike) return;
+    // Mostrar apenas resultado sem cálculo financeiro
+  }
+
+  try {
+    const resp = await fetch('/api/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        total_precip: STATE.totalPrecip,
+        type_of_cover: STATE.params.type_of_cover,
+        strike: STATE.params.strike || 0,
+        exit_point: STATE.params.exit_point || 0,
+        limit: limit,
+        tick: tick,
+        deductible_pct: ded
+      })
+    });
+    const data = await resp.json();
+    if (data.claim) {
+      STATE.claim = data.claim;
+      renderClaim(data.claim, STATE.params);
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderClaim(c, p) {
+  const unit = p.type_of_cover === 'precipitation' ? 'mm' : '°C';
+  const triggered = c.triggered;
+  const statusBadge = triggered
+    ? '<span class="status-badge status-amber">⚡ SINISTRO ACIONADO</span>'
+    : '<span class="status-badge status-green">✅ SEM SINISTRO</span>';
+
+  document.getElementById('claimResult').innerHTML = `
+    <div style="margin-bottom:1rem;">${statusBadge}</div>
+    <div class="result-grid">
+      <div class="result-item">
+        <label>Precipitação Observada</label>
+        <div class="val ${triggered ? 'bad':'good'}">${c.total_observed} ${unit}</div>
+      </div>
+      <div class="result-item">
+        <label>Strike (Gatilho)</label>
+        <div class="val">${c.strike} ${unit}</div>
+      </div>
+      <div class="result-item">
+        <label>Déficit</label>
+        <div class="val ${triggered ? 'warn':''}">${c.deficit} ${unit}</div>
+      </div>
+      <div class="result-item">
+        <label>Indenização Bruta</label>
+        <div class="val">R$ ${c.payout_gross.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      </div>
+      <div class="result-item">
+        <label>Franquia</label>
+        <div class="val">R$ ${c.deductible_value.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      </div>
+      <div class="result-item">
+        <label>Indenização Final</label>
+        <div class="val big ${triggered ? 'warn':'good'}">R$ ${c.payout_final.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      </div>
+    </div>
+    <div class="alert ${triggered ? 'alert-warn':'alert-info'}" style="margin-top:1rem;">
+      <span>${triggered ? '⚡':'✅'}</span>
+      <div>${c.message}</div>
+    </div>
+  `;
+  document.getElementById('claimCard').style.display = 'block';
+  document.getElementById('claimCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// DOWNLOAD EXCEL
+// ═══════════════════════════════════════════════════════════
+async function downloadExcel() {
+  if (!STATE.dailyData.length) {
+    showError('Nenhum dado para exportar. Processe uma apólice primeiro.');
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/download-excel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        params: STATE.params,
+        daily_data: STATE.dailyData,
+        total_precip: STATE.totalPrecip,
+        claim: STATE.claim
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      showError(`Erro ao gerar Excel: ${err}`);
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CHIRPS_V3_regulacao_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch(e) {
+    showError(`Erro: ${e.message}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DOWNLOAD DADOS CHIRPS
+// ═══════════════════════════════════════════════════════════
+async function downloadData() {
+  const years = STATE.yearsNeeded;
+  if (!years || years.length === 0) return;
+
+  document.getElementById('btnDownload').disabled = true;
+  document.getElementById('dlProgressWrap').style.display = 'block';
+
+  for (const year of years) {
+    document.getElementById('dlProgressMsg').textContent = `Iniciando download de ${year}...`;
+    document.getElementById('dlProgressBar').style.width = '5%';
+
+    try {
+      const startResp = await fetch('/api/data/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, force: false })
+      });
+      const startData = await startResp.json();
+
+      if (!startData.task_id) {
+        document.getElementById('dlProgressMsg').textContent = `Erro ao iniciar download de ${year}`;
+        continue;
+      }
+
+      // Poll status
+      await pollTaskProgress(startData.task_id, (task) => {
+        document.getElementById('dlProgressMsg').textContent = task.message;
+        document.getElementById('dlProgressBar').style.width = `${task.progress || 10}%`;
+      });
+
+    } catch(e) {
+      document.getElementById('dlProgressMsg').textContent = `Erro: ${e.message}`;
+    }
+  }
+
+  document.getElementById('dlProgressMsg').textContent = '✅ Download concluído! Processando novamente...';
+  document.getElementById('dlProgressBar').style.width = '100%';
+  document.getElementById('btnDownload').disabled = false;
+
+  setTimeout(() => {
+    document.getElementById('downloadNotice').style.display = 'none';
+    processRegulation();
+  }, 2000);
+}
+
+async function pollTaskProgress(taskId, onUpdate) {
+  return new Promise((resolve) => {
+    const interval = setInterval(async () => {
+      try {
+        const resp = await fetch(`/api/task/${taskId}`);
+        const task = await resp.json();
+        onUpdate(task);
+        if (task.status === 'completed' || task.status === 'error') {
+          clearInterval(interval);
+          resolve(task);
+        }
+      } catch(e) {
+        clearInterval(interval);
+        resolve({ status: 'error', error: e.message });
+      }
+    }, 3000);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILITÁRIOS DE UI
+// ═══════════════════════════════════════════════════════════
+function showLoading(show) {
+  document.getElementById('loading').classList.toggle('show', show);
+}
+function hideAll() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('downloadNotice').style.display = 'none';
+  document.getElementById('claimCard').style.display = 'none';
+}
+function showError(msg) {
+  showLoading(false);
+  document.getElementById('errorMsg').textContent = msg;
+  document.getElementById('errorBox').style.display = 'flex';
+  document.getElementById('errorBox').scrollIntoView({ behavior: 'smooth' });
+}
+function showDownloadNotice(msg, years) {
+  showLoading(false);
+  document.getElementById('downloadMsg').textContent = msg;
+  document.getElementById('downloadNotice').style.display = 'block';
+  document.getElementById('downloadNotice').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# ============================================================
+# .gitignore — CHIRPS V3.0 Paramétrico
+# ============================================================
+
+# Dados NetCDF (arquivos grandes — armazenados no disco Render)
+data/
+*.nc
+*.nc4
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# Credenciais e configuração local
+.env
+.env.*
+credentials/
+*.json
+!package.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testes
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Outputs temporários
+output/
+tmp/
+temp/

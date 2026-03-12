@@ -830,11 +830,91 @@ def extract_point_from_tif(tif_path: str, target_lat: float, target_lon: float,
     }
 
 
+def _get_month_dir_name(year: int, month: int) -> str:
+    """
+    Gera nome do diretório para qualquer ano/mês.
+    Ex: (2025, 10) → 'oct2025', (2025, 11) → 'nov2025', (2026, 3) → 'mar2026'
+    """
+    month_abbr = {
+        1: "jan", 2: "feb", 3: "mar", 4: "apr",
+        5: "may", 6: "jun", 7: "jul", 8: "aug",
+        9: "sep", 10: "oct", 11: "nov", 12: "dec"
+    }
+    return f"{month_abbr[month]}{year}"
+
+
+def _download_tif_auto(year: int, month: int, day: int, local_dir: str) -> tuple:
+    """
+    Tenta baixar automaticamente o TIF final (rnl) do servidor CHC-UCSB.
+    
+    Fonte final: https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/{year}/
+    Fonte prelim: https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/{year}/
+
+    Returns:
+        (local_path, is_prelim) ou (None, None) se falhar
+    """
+    import urllib.request
+    import calendar
+
+    os.makedirs(local_dir, exist_ok=True)
+
+    final_fname = get_tif_filename_final(year, month, day)
+    local_final = os.path.join(local_dir, final_fname)
+
+    # Fontes para dados finais (rnl)
+    final_urls = [
+        f"https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/{year}/{final_fname}",
+    ]
+
+    # Tentar download de arquivo final (rnl)
+    for url in final_urls:
+        try:
+            logger.info(f"[AUTO-DOWNLOAD] Baixando TIF final: {url}")
+            req = urllib.request.Request(url, headers={"User-Agent": "CHIRPSv3-Extractor/3.0"})
+            with urllib.request.urlopen(req, timeout=120) as response:
+                data = response.read()
+            if len(data) > 10000:  # arquivo válido > 10 KB
+                with open(local_final, "wb") as f:
+                    f.write(data)
+                logger.info(f"[AUTO-DOWNLOAD] ✓ Salvo: {local_final} ({len(data)//1024} KB)")
+                return local_final, False
+        except Exception as e:
+            logger.warning(f"[AUTO-DOWNLOAD] Falha ao baixar {url}: {e}")
+
+    # Tentar dados preliminares como último recurso
+    prelim_fname = get_tif_filename_prelim(year, month, day)
+    local_prelim = os.path.join(local_dir, prelim_fname)
+    prelim_urls = [
+        f"https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/{year}/{prelim_fname}",
+    ]
+
+    for url in prelim_urls:
+        try:
+            logger.info(f"[AUTO-DOWNLOAD] Tentando TIF prelim: {url}")
+            req = urllib.request.Request(url, headers={"User-Agent": "CHIRPSv3-Extractor/3.0"})
+            with urllib.request.urlopen(req, timeout=120) as response:
+                data = response.read()
+            if len(data) > 10000:
+                with open(local_prelim, "wb") as f:
+                    f.write(data)
+                logger.info(f"[AUTO-DOWNLOAD] ✓ Prelim salvo: {local_prelim} ({len(data)//1024} KB)")
+                return local_prelim, True
+        except Exception as e:
+            logger.warning(f"[AUTO-DOWNLOAD] Falha ao baixar prelim {url}: {e}")
+
+    return None, None
+
+
 def find_tif_for_date(year: int, month: int, day: int, 
                        tif_base_dir: str = None) -> tuple:
     """
     Busca arquivo TIF para uma data específica.
-    Tenta: (1) diretório local, (2) download automático da fonte.
+    Suporta QUALQUER ano/mês com detecção dinâmica de diretório.
+    
+    Fluxo:
+    1. Verifica arquivo final (rnl) no diretório local padrão (ex: oct2025/)
+    2. Verifica arquivo preliminar no mesmo diretório
+    3. Se não encontrado e AUTO_DOWNLOAD habilitado, baixa do CHC-UCSB
     
     Returns:
         (path, is_prelim) ou (None, None) se não disponível
@@ -842,27 +922,25 @@ def find_tif_for_date(year: int, month: int, day: int,
     if tif_base_dir is None:
         tif_base_dir = CHIRPS_V3_TIF_BASE_DIR
     
-    # Mapear diretório por mês
-    month_dirs = {
-        (2025, 12): "dec2025",
-        (2026, 1):  "jan2026",
-        (2026, 2):  "feb2026",
-    }
+    # Gera nome do diretório dinamicamente para qualquer mês/ano
+    month_dir_name = _get_month_dir_name(year, month)
+    month_dir = os.path.join(tif_base_dir, month_dir_name)
+
+    final_fname = get_tif_filename_final(year, month, day)
+    final_path = os.path.join(month_dir, final_fname)
+    if os.path.exists(final_path):
+        return final_path, False
     
-    month_dir = month_dirs.get((year, month))
-    
-    if month_dir:
-        # Verificar arquivo final
-        final_fname = get_tif_filename_final(year, month, day)
-        final_path = os.path.join(tif_base_dir, month_dir, final_fname)
-        if os.path.exists(final_path):
-            return final_path, False
-        
-        # Verificar arquivo preliminar
-        prelim_fname = get_tif_filename_prelim(year, month, day)
-        prelim_path = os.path.join(tif_base_dir, month_dir, prelim_fname)
-        if os.path.exists(prelim_path):
-            return prelim_path, True
+    prelim_fname = get_tif_filename_prelim(year, month, day)
+    prelim_path = os.path.join(month_dir, prelim_fname)
+    if os.path.exists(prelim_path):
+        return prelim_path, True
+
+    # Auto-download: criar diretório e baixar do CHC-UCSB
+    os.makedirs(month_dir, exist_ok=True)
+    downloaded_path, is_prelim = _download_tif_auto(year, month, day, month_dir)
+    if downloaded_path:
+        return downloaded_path, is_prelim
     
     return None, None
 

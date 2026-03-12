@@ -952,50 +952,29 @@ def extract_chirps_v3_with_tif_fallback(
 ) -> dict:
     """
     Versão aprimorada que combina:
-    1. NetCDF anual (anos históricos) 
-    2. NetCDF de período de apólice (dez/2025 a fev/2026, pré-processado)
-    3. TIFs diários como fallback
+    1. NetCDF anual (byYear) para meses com dados finais disponíveis
+    2. TIFs diários finais (rnl) para meses recentes sem byYear ainda
     
-    Esta é a função recomendada para o período 2025-12-01 a 2026-02-15.
+    IMPORTANTE: Dados preliminares (prelim/sat) NÃO são utilizados.
+    Apenas dados finais gauge-adjusted (rnl) são incluídos no cálculo.
+    Meses sem dados finais disponíveis ficam como lacunas.
+    
+    Esta é a função recomendada para qualquer período CHIRPS V3.
     """
+    from datetime import date as date_cls
+    
+    if tif_base_dir is None:
+        tif_base_dir = CHIRPS_V3_TIF_BASE_DIR
+
     start_dt = datetime.strptime(required_start, "%Y-%m-%d")
     end_dt = datetime.strptime(required_end, "%Y-%m-%d")
-    
-    # Verificar se o período inclui dados de TIF (pós-2025-11)
-    needs_tif_data = (
-        (start_dt.year == 2025 and start_dt.month >= 12) or
-        (start_dt.year >= 2026) or
-        (end_dt.year == 2025 and end_dt.month >= 12) or
-        (end_dt.year >= 2026)
-    )
-    
+
     dfs = []
     audit_rows = []
-    
-    # PARTE 1: Tentar NetCDF de período da apólice (mais eficiente)
-    if use_policy_nc and needs_tif_data and os.path.exists(POLICY_NC_FILE):
-        logger.info(f"Usando NetCDF de período da apólice: {POLICY_NC_FILE}")
-        try:
-            df_policy = extract_chirps_from_policy_nc(
-                target_lat, target_lon, required_start, required_end
-            )
-            if not df_policy.empty:
-                dfs.append(df_policy)
-                audit_rows.append({
-                    "arquivo": os.path.basename(POLICY_NC_FILE),
-                    "status": "ok",
-                    "variavel_lida": "precip",
-                    "unidade": "mm/day",
-                    "inicio_no_arquivo": "2025-12-01",
-                    "fim_no_arquivo": "2026-02-15",
-                    "dias_extraidos": len(df_policy),
-                    "observacao": f"NetCDF apólice - CHIRPS V3 final+prelim | Pixel: LAT={df_policy['pixel_latitude'].iloc[0]:.5f}, LON={df_policy['pixel_longitude'].iloc[0]:.5f}"
-                })
-                logger.info(f"[OK] NetCDF apólice → {len(df_policy)} dias extraídos")
-        except Exception as e:
-            logger.warning(f"Falha no NetCDF de apólice: {e}, tentando TIFs individuais...")
-    
-    # PARTE 2: Processar arquivos NetCDF anuais (para outros períodos)
+
+    # -----------------------------------------------------------------
+    # PARTE 1: NetCDF anuais (byYear) — fonte principal CHIRPS V3 final
+    # -----------------------------------------------------------------
     if files:
         result_nc = extract_chirps_v3(
             files, target_lat, target_lon, required_start, required_end, data_dir
@@ -1003,6 +982,85 @@ def extract_chirps_v3_with_tif_fallback(
         if result_nc.get("df") is not None and not result_nc["df"].empty:
             dfs.append(result_nc["df"])
             audit_rows.extend(result_nc["audit_df"].to_dict('records'))
+
+    # -----------------------------------------------------------------
+    # PARTE 2: TIFs diários finais (rnl) para meses não cobertos pelo byYear
+    # Lógica: para cada dia do período, verificar se já foi coberto pelo
+    # byYear; se não, tentar TIF final (rnl). Dados prelim são IGNORADOS.
+    # -----------------------------------------------------------------
+    covered_dates = set()
+    if dfs:
+        tmp = pd.concat(dfs, ignore_index=True)
+        tmp["time"] = pd.to_datetime(tmp["time"])
+        covered_dates = set(tmp["time"].dt.normalize().dt.date)
+
+    import rasterio
+    from datetime import date as date_cls
+
+    current_day = start_dt.date()
+    end_day = end_dt.date()
+
+    tif_rows = []
+    tif_audit = {}  # keyed by (year, month)
+
+    while current_day <= end_day:
+        if current_day not in covered_dates:
+            y, m, d = current_day.year, current_day.month, current_day.day
+            tif_path, is_prelim = find_tif_for_date(y, m, d, tif_base_dir)
+
+            if tif_path and not is_prelim:
+                # Apenas TIF FINAL (rnl) — nunca prelim
+                try:
+                    rec = extract_point_from_tif(
+                        tif_path, target_lat, target_lon,
+                        current_day.strftime("%Y-%m-%d"), is_prelim=False
+                    )
+                    tif_rows.append({
+                        "time": current_day.strftime("%Y-%m-%d"),
+                        "latitude": target_lat,
+                        "longitude": target_lon,
+                        "precip": round(float(rec["precip"]), 4),
+                        "pixel_latitude": round(float(rec["pixel_lat"]), 6),
+                        "pixel_longitude": round(float(rec["pixel_lon"]), 6),
+                        "distance_km": round(float(rec["distance_km"]), 4),
+                        "source_file": os.path.basename(tif_path)
+                    })
+                    key = (y, m)
+                    if key not in tif_audit:
+                        tif_audit[key] = {"count": 0, "total": 0.0, "path": tif_path}
+                    tif_audit[key]["count"] += 1
+                    tif_audit[key]["total"] += float(rec["precip"])
+                except Exception as e:
+                    logger.warning(f"Erro ao ler TIF {tif_path}: {e}")
+            elif tif_path and is_prelim:
+                # Dados preliminares existem mas NÃO são usados
+                logger.info(
+                    f"[PRELIM IGNORADO] {current_day}: {os.path.basename(tif_path)} "
+                    f"(dados finais rnl ainda não disponíveis)"
+                )
+            # else: sem TIF disponível → lacuna natural
+
+        current_day += timedelta(days=1)
+
+    if tif_rows:
+        df_tif = pd.DataFrame(tif_rows)
+        dfs.append(df_tif)
+        for (y, m), info in tif_audit.items():
+            import calendar
+            month_name = calendar.month_abbr[m]
+            audit_rows.append({
+                "arquivo": f"TIFs rnl {month_name}/{y} ({info['count']} dias)",
+                "status": "ok",
+                "variavel_lida": "precip",
+                "unidade": "mm/day",
+                "inicio_no_arquivo": f"{y}-{m:02d}-01",
+                "fim_no_arquivo": f"{y}-{m:02d}-{info['count']:02d}",
+                "dias_extraidos": info["count"],
+                "observacao": (
+                    f"TIFs diários FINAIS (rnl) CHIRPS V3 | "
+                    f"Total {info['total']:.2f} mm | Pixel: LAT={target_lat:.5f}, LON={target_lon:.5f}"
+                )
+            })
     
     # Consolidar resultados
     if not dfs:
@@ -1015,29 +1073,54 @@ def extract_chirps_v3_with_tif_fallback(
             "status": "error",
             "message": "Nenhum dado encontrado para o período especificado."
         }
-    
+
     full_df = pd.concat(dfs, ignore_index=True)
     full_df["time"] = pd.to_datetime(full_df["time"])
     full_df = full_df.sort_values("time").drop_duplicates(subset=["time"])
     full_df = full_df.reset_index(drop=True)
-    
+
     full_df["precip"] = pd.to_numeric(full_df["precip"], errors="coerce").fillna(0.0)
     full_df.loc[full_df["precip"] < 0, "precip"] = 0.0
-    
+
     expected_days = pd.date_range(start=required_start, end=required_end, freq="D")
     existing_days = pd.to_datetime(full_df["time"]).dt.normalize()
     missing_days_list = expected_days.difference(existing_days)
     gaps_df = pd.DataFrame({"dias_ausentes": missing_days_list})
-    
+
     total_precip = float(full_df["precip"].sum())
     missing_days = len(missing_days_list)
-    
-    status = "ok" if missing_days == 0 else "partial"
-    if missing_days > 7:
+
+    # Verificar se lacunas são por dados preliminares ainda não finalizados
+    prelim_pending_days = 0
+    for d in missing_days_list:
+        d_date = d.date() if hasattr(d, "date") else d
+        y, m, day = d_date.year, d_date.month, d_date.day
+        _, is_prelim = find_tif_for_date(y, m, day, tif_base_dir)
+        if is_prelim:
+            prelim_pending_days += 1
+
+    if missing_days == 0:
+        status = "ok"
+    elif prelim_pending_days > 0 and missing_days == prelim_pending_days:
+        status = "aguardando_dados_finais"
+    elif missing_days <= 7:
+        status = "partial"
+    else:
         status = "partial_critical"
-    
-    logger.info(f"Total precipitação: {total_precip:.2f} mm | Lacunas: {missing_days} dias")
-    
+
+    logger.info(
+        f"Total precipitação: {total_precip:.2f} mm | "
+        f"Lacunas: {missing_days} dias "
+        f"({'aguardando dados finais rnl' if prelim_pending_days else 'sem dados'})"
+    )
+
+    msg = f"Extração concluída: {len(full_df)} dias, {total_precip:.2f} mm total"
+    if prelim_pending_days:
+        msg += (
+            f" | {prelim_pending_days} dia(s) aguardando dados finais rnl "
+            f"(dados preliminares disponíveis mas não utilizados)"
+        )
+
     return {
         "df": full_df,
         "audit_df": pd.DataFrame(audit_rows),
@@ -1045,5 +1128,5 @@ def extract_chirps_v3_with_tif_fallback(
         "total_precip": total_precip,
         "missing_days": missing_days,
         "status": status,
-        "message": f"Extração concluída: {len(full_df)} dias, {total_precip:.2f} mm total"
+        "message": msg
     }

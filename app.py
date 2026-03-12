@@ -277,10 +277,24 @@ def api_download_excel():
         if not df_export.empty:
             df_export = df_export.rename(columns={
                 "date": "time",
-                "precip": "precip",
                 "pixel_lat": "pixel_latitude",
                 "pixel_lon": "pixel_longitude"
             })
+            # Adicionar colunas obrigatórias se ausentes (dados vindos do frontend)
+            lat = params.get("latitude", 0)
+            lon = params.get("longitude", 0)
+            if "latitude" not in df_export.columns:
+                df_export["latitude"] = lat
+            if "longitude" not in df_export.columns:
+                df_export["longitude"] = lon
+            if "source_file" not in df_export.columns:
+                df_export["source_file"] = "CHIRPS V3.0"
+            if "distance_km" not in df_export.columns:
+                df_export["distance_km"] = 0.0
+            if "pixel_latitude" not in df_export.columns:
+                df_export["pixel_latitude"] = lat
+            if "pixel_longitude" not in df_export.columns:
+                df_export["pixel_longitude"] = lon
 
         # Gerar Excel temporário
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False, 

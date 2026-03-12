@@ -390,9 +390,21 @@ def export_to_excel(result: dict, output_path: str,
     with pd.ExcelWriter(str(out_path), engine="openpyxl") as writer:
         # ─── Aba DADOS ─────────────────────────────────────────────────────
         if not df.empty:
-            export_df = df[["time", "latitude", "longitude", "precip",
-                            "pixel_latitude", "pixel_longitude",
-                            "distance_km", "source_file"]].copy()
+            # Garantir que todas as colunas necessárias existam
+            required_cols = ["time", "latitude", "longitude", "precip",
+                             "pixel_latitude", "pixel_longitude",
+                             "distance_km", "source_file"]
+            for col in required_cols:
+                if col not in df.columns:
+                    if col in ("latitude", "longitude"):
+                        df[col] = target_lat if col == "latitude" else target_lon
+                    elif col == "source_file":
+                        df[col] = "CHIRPS V3.0"
+                    elif col == "distance_km":
+                        df[col] = 0.0
+                    elif col in ("pixel_latitude", "pixel_longitude"):
+                        df[col] = target_lat if col == "pixel_latitude" else target_lon
+            export_df = df[required_cols].copy()
             export_df["time"] = pd.to_datetime(export_df["time"]).dt.strftime("%Y-%m-%d")
             export_df["precip"] = export_df["precip"].round(6)
             export_df["distance_km"] = export_df["distance_km"].round(6)

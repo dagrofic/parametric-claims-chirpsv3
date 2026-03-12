@@ -790,12 +790,20 @@ def extract_point_from_tif(tif_path: str, target_lat: float, target_lon: float,
     try:
         import rasterio
         from rasterio.transform import rowcol
+        import math as _math
     except ImportError:
         raise ImportError("rasterio é necessário para leitura de TIF. Execute: pip install rasterio")
     
     with rasterio.open(tif_path) as src:
-        # Calcular índice do pixel mais próximo
-        row, col = rowcol(src.transform, target_lon, target_lat, op=round)
+        # Calcular índice do pixel que contém o ponto usando floor (método correto)
+        # IMPORTANTE: usar math.floor (não round) para encontrar o pixel que CONTÉM
+        # a coordenada. round() causa erro de um pixel quando a fração > 0.5.
+        # Exemplo: lon=-54.8183 → col=2503.634 → floor=2503 (pixel [-54.85,-54.80])
+        #          round() daria 2504 (pixel [-54.80,-54.75]) ← ERRADO
+        col_float = (target_lon - src.transform.c) / src.transform.a
+        row_float = (target_lat - src.transform.f) / src.transform.e
+        col = _math.floor(col_float)
+        row = _math.floor(row_float)
         
         # Garantir que está dentro dos limites
         row = max(0, min(row, src.height - 1))

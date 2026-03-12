@@ -205,9 +205,22 @@ def api_process():
                 audit_data.append({k: str(v) if v is not None else "" 
                                    for k, v in row.items()})
 
+        # Extrair pixel coords do primeiro dado disponível
+        pixel_lat_val = None
+        pixel_lon_val = None
+        if daily_data:
+            pixel_lat_val = daily_data[0].get("pixel_lat")
+            pixel_lon_val = daily_data[0].get("pixel_lon")
+
         return jsonify({
             "success": True,
             "params": params,
+            # Coordenadas contratuais (exatas do HTML) - nível raiz para facilitar acesso
+            "latitude": lat,
+            "longitude": lon,
+            # Pixel CHIRPS usado na extração
+            "pixel_latitude": pixel_lat_val,
+            "pixel_longitude": pixel_lon_val,
             "daily_data": daily_data,
             "total_precip": round(total_precip, 4),
             "missing_days": result["missing_days"],

@@ -4,6 +4,8 @@
 
 Substitui a fonte CHIRPS V2 (Google Earth Engine) por **CHIRPS V3.0** com arquivos NetCDF locais da fonte oficial CHC/UCSB.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/dagrofic/parametric-claims-chirpsv3)
+
 ---
 
 ## 🌐 Produção
@@ -14,6 +16,7 @@ Substitui a fonte CHIRPS V2 (Google Earth Engine) por **CHIRPS V3.0** com arquiv
 | Sistema CHIRPS V3 | https://claimsparametricchirpsv3.insuranceandreinsuranceapps.com/ |
 | Repositório V2 | https://github.com/dagrofic/parametric-claims-standalone |
 | **Repositório V3** | **https://github.com/dagrofic/parametric-claims-chirpsv3** |
+| **Documentação Completa** | **[DOCUMENTATION_COMPLETE.md](./DOCUMENTATION_COMPLETE.md)** |
 
 ---
 
@@ -151,10 +154,26 @@ O sistema reproduz **exatamente** a lógica do script de validação (`CHIRPS v3
 - ✅ Detecção automática de coordenadas lat/lon/time
 - ✅ Ajuste de longitude 0-360 vs -180/+180
 - ✅ Extração pelo método `nearest` (pixel mais próximo)
+- ✅ **Seleção de pixel com `floor()` — não `round()`** (correção crítica commit 89634f6)
 - ✅ Cálculo Haversine de distância ponto-pixel (auditoria)
 - ✅ Detecção de lacunas no período
 - ✅ Fallback de engines: h5netcdf → netcdf4 → scipy
 - ✅ Export Excel: dados + auditoria_arquivos + auditoria_lacunas + resumo_parametrico
+- ✅ Suporte a TIFs diários finais (rnl) para meses sem NetCDF byYear ainda
+- ✅ Dados preliminares (prelim/sat) NUNCA utilizados no cálculo
+
+## ✅ Resultados de Validação
+
+| Caso | Apólice | Referência | Sistema | Diferença |
+|---|---|---|---|---|
+| Fábio 321 | 1000100000321 | 226.91 mm | 226.91 mm | 0.001 mm ✅ |
+| Fábio 322 | 1000100000322 | 248.71 mm | 248.71 mm | 0.004 mm ✅ |
+| Jose Oneide 325 | 1000100000325 | 237.13 mm | 237.13 mm | 0.004 mm ✅ |
+| Palmeiras 547 | — | 645.7899 mm | 645.7897 mm | 0.0002 mm ✅ |
+| Palmeiras 548 | — | 655.3109 mm | 655.3108 mm | 0.0001 mm ✅ |
+| Palmeiras 549 | — | 591.1500 mm | 591.1499 mm | 0.0001 mm ✅ |
+| Palmeiras 550 | — | 580.0818 mm | 580.0818 mm | 0.0000 mm ✅ |
+| Clovis 113 | — | 320.4261 mm | 320.4261 mm | 0.0000 mm ✅ |
 
 ---
 

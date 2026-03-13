@@ -20,10 +20,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Diretório de trabalho
 WORKDIR /app
 
-# Dependências do sistema para h5netcdf/netcdf4
+# Dependências do sistema para h5netcdf/netcdf4/rasterio
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libhdf5-dev \
     libnetcdf-dev \
+    libgdal-dev \
+    gdal-bin \
     wget \
     curl \
     && rm -rf /var/lib/apt/lists/*
